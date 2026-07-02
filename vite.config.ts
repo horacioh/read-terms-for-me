@@ -14,7 +14,6 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve('popup/popup.html'),
         sidepanel: resolve('sidepanel/sidepanel.html'),
         options: resolve('options/options.html'),
         background: resolve('src/background.ts'),

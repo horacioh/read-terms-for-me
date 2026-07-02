@@ -3,7 +3,7 @@
   "name": "Read Terms For Me",
   "version": "0.1.0",
   "description": "Detects Terms of Service links and summarizes them with BYOK or local LLMs.",
-  "permissions": ["activeTab", "storage", "sidePanel"],
+  "permissions": ["activeTab", "tabs", "storage", "sidePanel"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
@@ -17,7 +17,6 @@
     }
   ],
   "action": {
-    "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon.svg",
       "32": "icons/icon.svg"

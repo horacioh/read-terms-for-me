@@ -128,6 +128,12 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   console.log('[RTFM:bg] history entry saved, id:', entry.id);
 }
 
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.windowId) {
+    void chrome.sidePanel.open({ windowId: tab.windowId });
+  }
+});
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({ activeAnalysis: null });
 });
