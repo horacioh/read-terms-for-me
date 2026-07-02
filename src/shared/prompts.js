@@ -38,6 +38,52 @@ export function parsePreferencesResponse(response) {
     }
     return [];
 }
+export function buildScoresPrompt(document) {
+    return `Analyze the following Terms of Service and score it on four categories.
+
+Each score is 0–100 where higher is better FOR THE USER:
+- **privacy**: How well user data is protected. 90-100 = minimal collection, no tracking/selling. 50-89 = some collection but transparent, limited sharing. 0-49 = extensive collection, tracking, or data selling/sharing.
+- **userRights**: How much control the user retains. 90-100 = user owns all content, fair termination, court access. 50-89 = some content license, reasonable termination. 0-49 = broad content license, termination without notice, forced arbitration.
+- **transparency**: How clear and fair the terms are. 90-100 = plain language, advance notice of changes, no hidden clauses. 50-89 = generally clear with some complexity. 0-49 = dense legalese, no change notices, hidden or unusual clauses.
+- **freedom**: How few restrictions are imposed. 90-100 = minimal restrictions, fair liability, easy to leave. 50-89 = standard restrictions, some liability limits. 0-49 = heavy restrictions, broad liability waivers, lock-in effects.
+
+Return ONLY a JSON object (no markdown fences):
+{
+  "privacy": { "score": <number>, "summary": "<one sentence>" },
+  "userRights": { "score": <number>, "summary": "<one sentence>" },
+  "transparency": { "score": <number>, "summary": "<one sentence>" },
+  "freedom": { "score": <number>, "summary": "<one sentence>" }
+}
+
+Document:
+${document}`;
+}
+const DEFAULT_CATEGORY = { score: 50, summary: 'Could not determine' };
+export function parseScoresResponse(response) {
+    try {
+        const clean = response.replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        const parsed = JSON.parse(clean);
+        function toCategory(val) {
+            if (val && typeof val === 'object' && 'score' in val && 'summary' in val) {
+                const obj = val;
+                return {
+                    score: Math.max(0, Math.min(100, Math.round(Number(obj.score) || 50))),
+                    summary: String(obj.summary ?? ''),
+                };
+            }
+            return DEFAULT_CATEGORY;
+        }
+        return {
+            privacy: toCategory(parsed.privacy),
+            userRights: toCategory(parsed.userRights),
+            transparency: toCategory(parsed.transparency),
+            freedom: toCategory(parsed.freedom),
+        };
+    }
+    catch {
+        return null;
+    }
+}
 export function parseSummaryResponse(response) {
     const lines = response.split('\n');
     const summary = {

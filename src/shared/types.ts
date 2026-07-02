@@ -32,6 +32,18 @@ export interface DetectedLink {
   score: number;
 }
 
+export interface CategoryScore {
+  score: number;
+  summary: string;
+}
+
+export interface TermsScores {
+  privacy: CategoryScore;
+  userRights: CategoryScore;
+  transparency: CategoryScore;
+  freedom: CategoryScore;
+}
+
 export interface SummaryResult {
   summary: string;
   keyPoints: string[];
@@ -40,6 +52,7 @@ export interface SummaryResult {
   restrictions: string[];
   termination: string;
   preferencesAnalysis: PreferenceAnalysis[];
+  scores?: TermsScores;
 }
 
 export interface PreferenceAnalysis {

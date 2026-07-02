@@ -1,7 +1,7 @@
 import { callLLM } from './shared/llm';
 import { getSettings, addHistoryEntry } from './shared/storage';
 import { extractTextFromHtml, truncateText } from './shared/extractor';
-import { buildSummaryPrompt, buildPreferencesPrompt, parseSummaryResponse, parsePreferencesResponse } from './shared/prompts';
+import { buildSummaryPrompt, buildPreferencesPrompt, buildScoresPrompt, parseSummaryResponse, parsePreferencesResponse, parseScoresResponse } from './shared/prompts';
 import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, HistoryEntry, SummaryResult } from './shared/types';
 
 const MAX_CHARS = 12000;
@@ -82,8 +82,8 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   const text = truncateText(extractTextFromHtml(html), MAX_CHARS);
   console.log('[RTFM:bg] extracted text length:', text.length);
 
-  console.log('[RTFM:bg] calling LLM (summary + preferences)...');
-  const [summaryRes, prefsRes] = await Promise.all([
+  console.log('[RTFM:bg] calling LLM (summary + preferences + scores)...');
+  const [summaryRes, prefsRes, scoresRes] = await Promise.all([
     callLLM({
       settings,
       prompt: buildSummaryPrompt(settings, text),
@@ -94,15 +94,21 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
       prompt: buildPreferencesPrompt(settings, text),
       systemPrompt: 'You are a helpful legal assistant. Respond only with valid JSON.',
     }),
+    callLLM({
+      settings,
+      prompt: buildScoresPrompt(text),
+      systemPrompt: 'You are a legal-document analyst. Respond only with valid JSON.',
+    }),
   ]);
 
-  console.log('[RTFM:bg] LLM summary error?', summaryRes.error ?? 'none', '| prefs error?', prefsRes.error ?? 'none');
+  console.log('[RTFM:bg] LLM summary error?', summaryRes.error ?? 'none', '| prefs error?', prefsRes.error ?? 'none', '| scores error?', scoresRes.error ?? 'none');
   if (summaryRes.error) {
     throw new Error(summaryRes.error);
   }
 
   const parsedSummary = parseSummaryResponse(summaryRes.text);
   const preferencesAnalysis = prefsRes.error ? [] : parsePreferencesResponse(prefsRes.text);
+  const scores = scoresRes.error ? undefined : (parseScoresResponse(scoresRes.text) ?? undefined);
 
   const summary: SummaryResult = {
     summary: parsedSummary.summary || summaryRes.text,
@@ -112,6 +118,7 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
     restrictions: parsedSummary.restrictions ?? [],
     termination: parsedSummary.termination ?? '',
     preferencesAnalysis,
+    scores,
   };
 
   const entry: HistoryEntry = {

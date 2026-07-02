@@ -35,30 +35,23 @@ export function PopupApp() {
         }
         void init();
     }, []);
-    const handleAnalyze = useCallback(async (url) => {
+    const handleAnalyze = useCallback((url) => {
         if (!tab?.id)
             return;
         setAnalyzingUrl(url);
         setError(null);
         try {
-            const result = (await chrome.runtime.sendMessage({
+            void chrome.runtime.sendMessage({
                 type: 'ANALYZE',
                 url,
                 pageUrl: tab.url || '',
                 pageTitle: tab.title || '',
                 windowId: tab.windowId,
-            }));
-            if (result.type === 'ERROR') {
-                setError(result.message);
-            }
-            else {
-                window.close();
-            }
+            });
+            window.close();
         }
         catch (err) {
             setError(err instanceof Error ? err.message : 'Analysis failed');
-        }
-        finally {
             setAnalyzingUrl(null);
         }
     }, [tab]);

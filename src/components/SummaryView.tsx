@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Badge } from './ui/Badge';
+import { ScoresOverview } from './ScoreGauge';
 import { ExternalLink } from 'lucide-react';
 import type { HistoryEntry } from '../shared/types';
 
@@ -44,12 +47,16 @@ export function SummaryView({ entry }: SummaryViewProps) {
         <p className="text-xs text-gray-500">Source page: {pageUrl}</p>
       </header>
 
+      {summary.scores && (
+        <ScoresOverview scores={summary.scores} />
+      )}
+
       <section aria-labelledby="summary-heading">
         <h3 id="summary-heading" className="text-lg font-semibold mb-2">
           Summary
         </h3>
-        <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">
-          {summary.summary}
+        <div className="prose prose-sm max-w-none text-gray-800">
+          <Markdown remarkPlugins={[remarkGfm]}>{summary.summary}</Markdown>
         </div>
       </section>
 
@@ -71,7 +78,9 @@ export function SummaryView({ entry }: SummaryViewProps) {
           <h3 id="data-usage-heading" className="text-lg font-semibold mb-2">
             Data Usage
           </h3>
-          <p className="text-gray-800 whitespace-pre-wrap">{summary.dataUsage}</p>
+          <div className="prose prose-sm max-w-none text-gray-800">
+            <Markdown remarkPlugins={[remarkGfm]}>{summary.dataUsage}</Markdown>
+          </div>
         </section>
       )}
 
@@ -93,7 +102,9 @@ export function SummaryView({ entry }: SummaryViewProps) {
           <h3 id="termination-heading" className="text-lg font-semibold mb-2">
             Termination
           </h3>
-          <p className="text-gray-800 whitespace-pre-wrap">{summary.termination}</p>
+          <div className="prose prose-sm max-w-none text-gray-800">
+            <Markdown remarkPlugins={[remarkGfm]}>{summary.termination}</Markdown>
+          </div>
         </section>
       )}
 
