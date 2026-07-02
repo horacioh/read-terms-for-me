@@ -49,8 +49,13 @@ export function SidePanelApp() {
     void loadLinks();
 
     const onActivated = () => { void loadLinks(); };
-    const onUpdated = (_tabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
-      if (changeInfo.status === 'complete') void loadLinks();
+    const onUpdated = (tabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+      if (changeInfo.status === 'complete' || changeInfo.url) {
+        // Only reload if the updated tab is the active one
+        chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => {
+          if (active?.id === tabId) void loadLinks();
+        });
+      }
     };
 
     chrome.tabs.onActivated.addListener(onActivated);
@@ -154,6 +159,13 @@ export function SidePanelApp() {
 
   const selectedEntry = history.find((h) => h.id === selectedId) ?? null;
 
+  // Split links into new vs already-analyzed
+  const historyUrls = new Set(history.map((h) => h.url));
+  const newLinks = links.filter((l) => !historyUrls.has(l.url));
+  const analyzedLinks = links
+    .filter((l) => historyUrls.has(l.url))
+    .map((l) => ({ link: l, entry: history.find((h) => h.url === l.url)! }));
+
   // --- Render ---
   return (
     <div className="flex h-screen flex-col">
@@ -205,14 +217,14 @@ export function SidePanelApp() {
         {/* Home view: detected links + history */}
         {!activeAnalysis && view === 'home' && (
           <div className="flex flex-col gap-4 p-4">
-            {/* Detected links on current page */}
-            {links.length > 0 ? (
+            {/* New links to analyze */}
+            {newLinks.length > 0 && (
               <section>
                 <h2 className="mb-3 text-sm font-semibold text-gray-700">
                   Found on this page
                 </h2>
                 <ul className="flex flex-col gap-2">
-                  {links.map((link) => (
+                  {newLinks.map((link) => (
                     <li
                       key={link.url}
                       className="rounded-lg border border-gray-200 p-3 flex flex-col gap-2"
@@ -233,7 +245,51 @@ export function SidePanelApp() {
                   ))}
                 </ul>
               </section>
-            ) : (
+            )}
+
+            {/* Already analyzed links on this page */}
+            {analyzedLinks.length > 0 && (
+              <section>
+                <h2 className="mb-3 text-sm font-semibold text-gray-700">
+                  Already analyzed
+                </h2>
+                <ul className="flex flex-col gap-2">
+                  {analyzedLinks.map(({ link, entry: e }) => (
+                    <li
+                      key={link.url}
+                      className="rounded-lg border border-gray-200 p-3 flex flex-col gap-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-medium" title={link.text}>
+                          {link.text || 'Terms of Service'}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(e.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          onPress={() => handleSelectEntry(e.id)}
+                          className="flex-1"
+                        >
+                          View Summary
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onPress={() => handleAnalyze(link.url)}
+                          className="flex-1"
+                        >
+                          Re-analyze
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {links.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-gray-500">
                 <FileText size={24} aria-hidden="true" />
                 <p>No Terms of Service links detected on this page.</p>
