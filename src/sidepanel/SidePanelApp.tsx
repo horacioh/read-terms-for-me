@@ -1,17 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { SummaryView } from '../components/SummaryView';
 import { HistoryList } from '../components/HistoryList';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { getHistory, deleteHistoryEntry, clearHistory } from '../shared/storage';
-import type { HistoryEntry } from '../shared/types';
+import type { ActiveAnalysis, HistoryEntry } from '../shared/types';
 
 export function SidePanelApp() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
+  const wasAnalyzingRef = useRef(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -30,9 +32,29 @@ export function SidePanelApp() {
   useEffect(() => {
     void loadHistory();
 
+    chrome.storage.local.get('activeAnalysis').then((result) => {
+      const value: ActiveAnalysis | null = result.activeAnalysis ?? null;
+      setActiveAnalysis(value);
+      wasAnalyzingRef.current = value?.status === 'loading';
+    });
+
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes.history) {
         void loadHistory();
+      }
+      if (changes.activeAnalysis) {
+        const newValue: ActiveAnalysis | null = changes.activeAnalysis.newValue ?? null;
+        setActiveAnalysis(newValue);
+
+        if (wasAnalyzingRef.current && newValue === null) {
+          getHistory().then((entries) => {
+            setHistory(entries);
+            if (entries.length > 0) {
+              setSelectedId(entries[0].id);
+            }
+          });
+        }
+        wasAnalyzingRef.current = newValue?.status === 'loading';
       }
     };
 
@@ -56,6 +78,11 @@ export function SidePanelApp() {
     setSelectedId(null);
     await loadHistory();
   }, [loadHistory]);
+
+  const dismissError = useCallback(() => {
+    setActiveAnalysis(null);
+    void chrome.storage.local.set({ activeAnalysis: null });
+  }, []);
 
   const selectedEntry = history.find((h) => h.id === selectedId) ?? history[0];
 
@@ -94,7 +121,18 @@ export function SidePanelApp() {
         </aside>
 
         <main className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-          {selectedEntry ? (
+          {activeAnalysis?.status === 'loading' ? (
+            <div className="flex h-full items-center justify-center">
+              <Loading label="Analyzing Terms of Service..." />
+            </div>
+          ) : activeAnalysis?.status === 'error' ? (
+            <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+              <ErrorMessage message={activeAnalysis.message ?? 'Analysis failed'} />
+              <Button variant="secondary" size="sm" onPress={dismissError}>
+                Dismiss
+              </Button>
+            </div>
+          ) : selectedEntry ? (
             <SummaryView entry={selectedEntry} />
           ) : (
             <div className="flex h-full items-center justify-center text-gray-500">

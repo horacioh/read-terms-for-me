@@ -4,7 +4,7 @@ import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
 import { Settings, FileText, AlertCircle } from 'lucide-react';
-import type { DetectedLink, AnalyzeResultMessage, ErrorMessage as ErrorMessageType } from '../shared/types';
+import type { DetectedLink } from '../shared/types';
 
 export function PopupApp() {
   const [links, setLinks] = useState<DetectedLink[]>([]);
@@ -38,28 +38,22 @@ export function PopupApp() {
   }, []);
 
   const handleAnalyze = useCallback(
-    async (url: string) => {
+    (url: string) => {
       if (!tab?.id) return;
       setAnalyzingUrl(url);
       setError(null);
 
       try {
-        const result = (await chrome.runtime.sendMessage({
+        void chrome.runtime.sendMessage({
           type: 'ANALYZE',
           url,
           pageUrl: tab.url || '',
           pageTitle: tab.title || '',
           windowId: tab.windowId,
-        })) as AnalyzeResultMessage | ErrorMessageType;
-
-        if (result.type === 'ERROR') {
-          setError(result.message);
-        } else {
-          window.close();
-        }
+        });
+        window.close();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Analysis failed');
-      } finally {
         setAnalyzingUrl(null);
       }
     },

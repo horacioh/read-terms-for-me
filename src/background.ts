@@ -2,16 +2,33 @@ import { callLLM } from './shared/llm';
 import { getSettings, addHistoryEntry } from './shared/storage';
 import { extractTextFromHtml, truncateText } from './shared/extractor';
 import { buildSummaryPrompt, buildPreferencesPrompt, parseSummaryResponse, parsePreferencesResponse } from './shared/prompts';
-import type { AnalyzeMessage, BackgroundMessage, HistoryEntry, SummaryResult } from './shared/types';
+import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, HistoryEntry, SummaryResult } from './shared/types';
 
 const MAX_CHARS = 12000;
 
+function setActiveAnalysis(value: ActiveAnalysis | null): void {
+  void chrome.storage.local.set({ activeAnalysis: value });
+}
+
 chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendResponse) => {
   if (message.type === 'ANALYZE') {
-    handleAnalyze(message).then(sendResponse).catch((err) => {
-      sendResponse({ type: 'ERROR', message: err instanceof Error ? err.message : 'Unknown error' });
-    });
-    return true;
+    setActiveAnalysis({ status: 'loading', url: message.url });
+    void chrome.sidePanel.open({ windowId: message.windowId }).catch(() => {});
+
+    void handleAnalyze(message)
+      .then(() => {
+        setActiveAnalysis(null);
+      })
+      .catch((err) => {
+        setActiveAnalysis({
+          status: 'error',
+          url: message.url,
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      });
+
+    sendResponse({ type: 'ANALYZE_STARTED' });
+    return false;
   }
 
   if (message.type === 'GET_HISTORY') {
@@ -34,7 +51,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
   return false;
 });
 
-async function handleAnalyze(message: AnalyzeMessage) {
+async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   const { url, pageUrl, pageTitle } = message;
   const settings = await getSettings();
 
@@ -87,13 +104,6 @@ async function handleAnalyze(message: AnalyzeMessage) {
   };
 
   await addHistoryEntry(entry);
-  try {
-    await chrome.sidePanel.open({ windowId: message.windowId });
-  } catch {
-    // Side panel may already be open; ignore.
-  }
-
-  return { type: 'ANALYZE_RESULT', entry } as const;
 }
 
 chrome.runtime.onInstalled.addListener(() => {

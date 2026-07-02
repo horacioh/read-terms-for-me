@@ -1,5 +1,11 @@
 export type LLMProvider = 'openai' | 'ollama' | 'deepseek';
 
+export interface ActiveAnalysis {
+  status: 'loading' | 'error';
+  url: string;
+  message?: string;
+}
+
 export interface Settings {
   provider: LLMProvider;
   apiKey: string;
