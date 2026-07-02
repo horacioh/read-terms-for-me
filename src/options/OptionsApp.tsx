@@ -137,7 +137,7 @@ export function OptionsApp() {
             />
           </div>
 
-          {settings.provider === 'openai' && (
+          {(settings.provider === 'openai' || settings.provider === 'deepseek') && (
             <div className="grid gap-2">
               <Label htmlFor="apiKey">API Key</Label>
               <Input
