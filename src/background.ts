@@ -6,26 +6,43 @@ import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, HistoryEntry, S
 
 const MAX_CHARS = 12000;
 
-function setActiveAnalysis(value: ActiveAnalysis | null): void {
-  void chrome.storage.local.set({ activeAnalysis: value });
+function setActiveAnalysis(value: ActiveAnalysis | null): Promise<void> {
+  console.log('[RTFM:bg] setActiveAnalysis:', JSON.stringify(value));
+  return chrome.storage.local.set({ activeAnalysis: value });
 }
 
 chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendResponse) => {
   if (message.type === 'ANALYZE') {
-    setActiveAnalysis({ status: 'loading', url: message.url });
-    void chrome.sidePanel.open({ windowId: message.windowId }).catch(() => {});
+    console.log('[RTFM:bg] ANALYZE received, url:', message.url, 'windowId:', message.windowId);
 
-    void handleAnalyze(message)
-      .then(() => {
-        setActiveAnalysis(null);
-      })
-      .catch((err) => {
-        setActiveAnalysis({
+    void (async () => {
+      try {
+        await setActiveAnalysis({ status: 'loading', url: message.url });
+        console.log('[RTFM:bg] activeAnalysis set to loading');
+      } catch (e) {
+        console.error('[RTFM:bg] failed to set activeAnalysis:', e);
+      }
+
+      try {
+        await chrome.sidePanel.open({ windowId: message.windowId });
+        console.log('[RTFM:bg] sidePanel.open succeeded');
+      } catch (e) {
+        console.warn('[RTFM:bg] sidePanel.open failed:', e);
+      }
+
+      try {
+        await handleAnalyze(message);
+        console.log('[RTFM:bg] handleAnalyze succeeded');
+        await setActiveAnalysis(null);
+      } catch (err) {
+        console.error('[RTFM:bg] handleAnalyze failed:', err);
+        await setActiveAnalysis({
           status: 'error',
           url: message.url,
           message: err instanceof Error ? err.message : 'Unknown error',
         });
-      });
+      }
+    })();
 
     sendResponse({ type: 'ANALYZE_STARTED' });
     return false;
@@ -53,8 +70,11 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 
 async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   const { url, pageUrl, pageTitle } = message;
+  console.log('[RTFM:bg] handleAnalyze start, fetching settings...');
   const settings = await getSettings();
+  console.log('[RTFM:bg] settings loaded, provider:', settings.provider, 'model:', settings.model, 'hasApiKey:', !!settings.apiKey);
 
+  console.log('[RTFM:bg] fetching ToS URL:', url);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not fetch Terms of Service: ${response.status} ${response.statusText}`);
@@ -62,7 +82,9 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
 
   const html = await response.text();
   const text = truncateText(extractTextFromHtml(html), MAX_CHARS);
+  console.log('[RTFM:bg] extracted text length:', text.length);
 
+  console.log('[RTFM:bg] calling LLM (summary + preferences)...');
   const [summaryRes, prefsRes] = await Promise.all([
     callLLM({
       settings,
@@ -76,6 +98,7 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
     }),
   ]);
 
+  console.log('[RTFM:bg] LLM summary error?', summaryRes.error ?? 'none', '| prefs error?', prefsRes.error ?? 'none');
   if (summaryRes.error) {
     throw new Error(summaryRes.error);
   }
@@ -104,6 +127,7 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   };
 
   await addHistoryEntry(entry);
+  console.log('[RTFM:bg] history entry saved, id:', entry.id);
 }
 
 chrome.runtime.onInstalled.addListener(() => {

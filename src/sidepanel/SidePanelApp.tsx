@@ -30,23 +30,29 @@ export function SidePanelApp() {
   }, [selectedId]);
 
   useEffect(() => {
+    console.log('[RTFM:sp] SidePanelApp mounted, loading history...');
     void loadHistory();
 
     chrome.storage.local.get('activeAnalysis').then((result) => {
       const value: ActiveAnalysis | null = result.activeAnalysis ?? null;
+      console.log('[RTFM:sp] initial activeAnalysis:', JSON.stringify(value));
       setActiveAnalysis(value);
       wasAnalyzingRef.current = value?.status === 'loading';
     });
 
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      console.log('[RTFM:sp] storage changed, keys:', Object.keys(changes).join(', '));
       if (changes.history) {
+        console.log('[RTFM:sp] history changed, reloading...');
         void loadHistory();
       }
       if (changes.activeAnalysis) {
         const newValue: ActiveAnalysis | null = changes.activeAnalysis.newValue ?? null;
+        console.log('[RTFM:sp] activeAnalysis changed:', JSON.stringify(newValue), '| wasAnalyzing:', wasAnalyzingRef.current);
         setActiveAnalysis(newValue);
 
         if (wasAnalyzingRef.current && newValue === null) {
+          console.log('[RTFM:sp] analysis completed, selecting newest entry');
           getHistory().then((entries) => {
             setHistory(entries);
             if (entries.length > 0) {
