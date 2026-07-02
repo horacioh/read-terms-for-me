@@ -5,7 +5,7 @@ import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
 import { getHistory, deleteHistoryEntry, clearHistory } from '../shared/storage';
-import { Settings, FileText, ChevronDown, ChevronRight, Trash2, ArrowLeft } from 'lucide-react';
+import { Settings, FileText, ChevronDown, ChevronRight, Trash2, ArrowLeft, Link } from 'lucide-react';
 import type { ActiveAnalysis, DetectedLink, HistoryEntry } from '../shared/types';
 
 type View = 'home' | 'summary';
@@ -24,6 +24,7 @@ export function SidePanelApp() {
   const wasAnalyzingRef = useRef(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [manualUrl, setManualUrl] = useState('');
 
   // --- Load detected links for the active tab ---
   const loadLinks = useCallback(async () => {
@@ -126,6 +127,18 @@ export function SidePanelApp() {
     },
     [currentTab]
   );
+
+  const handleManualAnalyze = useCallback(() => {
+    const trimmed = manualUrl.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed);
+    } catch {
+      return;
+    }
+    handleAnalyze(trimmed);
+    setManualUrl('');
+  }, [manualUrl, handleAnalyze]);
 
   const handleSelectEntry = useCallback((id: string) => {
     setSelectedId(id);
@@ -295,6 +308,29 @@ export function SidePanelApp() {
                 <p>No Terms of Service links detected on this page.</p>
               </div>
             )}
+
+            {/* Manual URL input */}
+            <section className="border-t border-gray-200 pt-4">
+              <h2 className="mb-2 text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Link size={14} aria-hidden="true" />
+                Analyze a URL
+              </h2>
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleManualAnalyze(); }}
+                className="flex gap-2"
+              >
+                <input
+                  type="url"
+                  value={manualUrl}
+                  onChange={(e) => setManualUrl(e.target.value)}
+                  placeholder="https://example.com/terms"
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <Button onPress={handleManualAnalyze} isDisabled={!manualUrl.trim()}>
+                  Analyze
+                </Button>
+              </form>
+            </section>
 
             {/* History section */}
             {!loading && history.length > 0 && (
