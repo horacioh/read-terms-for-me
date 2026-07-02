@@ -15,19 +15,17 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
   if (message.type === 'ANALYZE') {
     console.log('[RTFM:bg] ANALYZE received, url:', message.url, 'windowId:', message.windowId);
 
+    // sidePanel.open() must be called synchronously in the user-gesture context
+    void chrome.sidePanel.open({ windowId: message.windowId })
+      .then(() => console.log('[RTFM:bg] sidePanel.open succeeded'))
+      .catch((e) => console.warn('[RTFM:bg] sidePanel.open failed:', e));
+
     void (async () => {
       try {
         await setActiveAnalysis({ status: 'loading', url: message.url });
         console.log('[RTFM:bg] activeAnalysis set to loading');
       } catch (e) {
         console.error('[RTFM:bg] failed to set activeAnalysis:', e);
-      }
-
-      try {
-        await chrome.sidePanel.open({ windowId: message.windowId });
-        console.log('[RTFM:bg] sidePanel.open succeeded');
-      } catch (e) {
-        console.warn('[RTFM:bg] sidePanel.open failed:', e);
       }
 
       try {
