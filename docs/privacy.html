@@ -24,34 +24,27 @@
 
     <h2>Overview</h2>
     <p>
-      Read Terms For Me is a Chrome extension that helps you understand Terms of Service documents. This privacy policy explains what data the extension handles and how it is used.
+      Read Terms For Me is a Chrome extension that helps you understand Terms of Service documents. The guiding principle is that <strong>everything stays on your device</strong> unless you explicitly choose to send a document to the LLM provider you configure.
     </p>
 
-    <h2>Data we do not collect</h2>
-    <p>We do <strong>not</strong> collect, store, or transmit:</p>
+    <h2>What stays on your device</h2>
+    <p>All of the following are stored <strong>locally</strong> in your browser using <code>chrome.storage.local</code>:</p>
     <ul>
-      <li>Your browsing history.</li>
-      <li>The websites you visit.</li>
-      <li>Any personally identifiable information.</li>
-      <li>The full text of analyzed Terms of Service documents.</li>
-      <li>Your prompts or queries.</li>
+      <li>
+        <strong>Extension settings</strong> — provider, model, base URL, API key, language, custom prompts, privacy preferences, scoring rules, and consent status.
+      </li>
+      <li>
+        <strong>Local analysis history</strong> — the URLs you analyze, the page title/URL where the Terms of Service link was found, the summary, scores, and preference analysis. This lets you view previous runs and avoid re-analyzing the same URL.
+      </li>
+      <li>
+        <strong>Anonymous usage statistics</strong> — only a count of total analyses and how many times each privacy-preference category was matched.
+      </li>
     </ul>
+    <p>You can view, clear, or reset this local data at any time from the extension settings. History expires automatically after the number of days you configure (default 30).</p>
 
-    <h2>Data stored locally</h2>
-    <p>The only data stored on your device is:</p>
-    <ol>
-      <li>
-        <strong>Extension settings</strong> (provider, model, base URL, API key, language, custom prompts, privacy preferences, and scoring rules).
-      </li>
-      <li>
-        <strong>Anonymous usage statistics</strong>: the total number of analyses you have run and an aggregated count of which privacy-preference categories were matched across all analyses.
-      </li>
-    </ol>
-    <p>These statistics are anonymous and contain no information about the websites or Terms of Service documents you analyzed.</p>
-
-    <h2>Data sent to third parties</h2>
+    <h2>What is sent to third parties</h2>
     <p>
-      When you click <strong>Summarize</strong>, the extension sends the text of the selected Terms of Service document to the LLM provider you configured (for example, Ollama running locally, OpenAI, or DeepSeek). This happens only when you explicitly request an analysis.
+      When you click <strong>Summarize</strong>, the extension fetches the selected Terms of Service document and sends its text to the LLM provider you configured (OpenAI, DeepSeek, or Ollama). This happens only when you explicitly request an analysis.
     </p>
     <ul>
       <li>
@@ -61,11 +54,13 @@
         If you use <strong>OpenAI</strong> or <strong>DeepSeek</strong>, the request is sent to their API using the API key you provided. The API key is stored locally in your browser and is only sent to the provider you selected.
       </li>
     </ul>
+    <p>No page URLs, browsing history, prompts, or analysis results are sent to any third party.</p>
 
     <h2>Your rights</h2>
     <p>You can:</p>
     <ul>
-      <li>View and reset the anonymous usage statistics at any time from the extension settings.</li>
+      <li>View and reset anonymous usage statistics in the extension settings.</li>
+      <li>Clear your local analysis history in the extension settings.</li>
       <li>Delete all stored data by removing the extension from Chrome.</li>
       <li>Disable or uninstall the extension at any time.</li>
     </ul>

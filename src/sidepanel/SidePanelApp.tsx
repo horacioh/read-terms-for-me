@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { SummaryView } from '../components/SummaryView';
+import { HistoryList } from '../components/HistoryList';
 import { Button } from '../components/ui/Button';
 import { Loading } from '../components/ui/Loading';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Badge } from '../components/ui/Badge';
-import { Settings, FileText, Link, ArrowLeft } from 'lucide-react';
-import type { ActiveAnalysis, DetectedLink } from '../shared/types';
+import { Settings, FileText, Link, ArrowLeft, Trash2 } from 'lucide-react';
+import { getHistory, deleteHistoryEntry, clearHistory } from '../shared/storage';
+import type { ActiveAnalysis, DetectedLink, HistoryEntry } from '../shared/types';
 
 export function SidePanelApp() {
   const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
@@ -13,6 +15,13 @@ export function SidePanelApp() {
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
   const [manualUrl, setManualUrl] = useState('');
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+
+  const loadHistory = useCallback(async () => {
+    const entries = await getHistory();
+    setHistory(entries);
+  }, []);
 
   const loadLinks = useCallback(async () => {
     try {
@@ -38,6 +47,7 @@ export function SidePanelApp() {
 
   useEffect(() => {
     void loadLinks();
+    void loadHistory();
 
     const onActivated = () => {
       void loadLinks();
@@ -56,7 +66,7 @@ export function SidePanelApp() {
       chrome.tabs.onActivated.removeListener(onActivated);
       chrome.tabs.onUpdated.removeListener(onUpdated);
     };
-  }, [loadLinks]);
+  }, [loadLinks, loadHistory]);
 
   useEffect(() => {
     chrome.storage.session.get('activeAnalysis').then((result) => {
@@ -68,20 +78,28 @@ export function SidePanelApp() {
       areaName: string
     ) => {
       if (areaName !== 'session' || !changes.activeAnalysis) return;
-      setActiveAnalysis((changes.activeAnalysis.newValue as ActiveAnalysis | null) ?? null);
+      const newValue: ActiveAnalysis | null = changes.activeAnalysis.newValue ?? null;
+      setActiveAnalysis(newValue);
+      if (newValue?.status === 'complete') {
+        void loadHistory();
+        setSelectedHistoryId(null);
+      }
     };
 
     chrome.storage.onChanged.addListener(handleStorageChange);
     return () => chrome.storage.onChanged.removeListener(handleStorageChange);
-  }, []);
+  }, [loadHistory]);
 
   const handleAnalyze = useCallback(
     (url: string) => {
       if (!currentTab?.windowId) return;
+      setSelectedHistoryId(null);
       void chrome.runtime.sendMessage({
         type: 'ANALYZE',
         url,
         windowId: currentTab.windowId,
+        pageUrl: currentTab.url,
+        pageTitle: currentTab.title,
       });
     },
     [currentTab]
@@ -107,8 +125,53 @@ export function SidePanelApp() {
     void chrome.runtime.openOptionsPage();
   }, []);
 
-  const hasResult = activeAnalysis?.status === 'complete' && activeAnalysis.result;
-  const showHome = !hasResult && activeAnalysis?.status !== 'loading' && activeAnalysis?.status !== 'error';
+  const handleSelectHistory = useCallback((id: string) => {
+    setSelectedHistoryId(id);
+  }, []);
+
+  const handleDeleteHistory = useCallback(
+    async (id: string) => {
+      await deleteHistoryEntry(id);
+      if (selectedHistoryId === id) {
+        setSelectedHistoryId(null);
+      }
+      await loadHistory();
+    },
+    [selectedHistoryId, loadHistory]
+  );
+
+  const handleClearHistory = useCallback(async () => {
+    await clearHistory();
+    setSelectedHistoryId(null);
+    await loadHistory();
+  }, [loadHistory]);
+
+  const selectedHistory = history.find((h) => h.id === selectedHistoryId) ?? null;
+
+  const displayedResult =
+    activeAnalysis?.status === 'complete' && activeAnalysis.result && !selectedHistory
+      ? {
+          result: activeAnalysis.result,
+          url: activeAnalysis.url,
+          analyzedAt: activeAnalysis.analyzedAt,
+          title: undefined,
+        }
+      : selectedHistory
+        ? {
+            result: selectedHistory.summary,
+            url: selectedHistory.url,
+            analyzedAt: selectedHistory.createdAt,
+            title: selectedHistory.title,
+          }
+        : null;
+
+  const showHome =
+    !displayedResult && activeAnalysis?.status !== 'loading' && activeAnalysis?.status !== 'error';
+
+  const goHome = useCallback(() => {
+    void chrome.storage.session.set({ activeAnalysis: null });
+    setSelectedHistoryId(null);
+  }, []);
 
   return (
     <div className="flex h-screen flex-col">
@@ -116,7 +179,7 @@ export function SidePanelApp() {
         <div className="flex items-center gap-2">
           {!showHome && (
             <button
-              onClick={() => void chrome.storage.session.set({ activeAnalysis: null })}
+              onClick={goHome}
               className="rounded p-1 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               aria-label="Back to home"
             >
@@ -149,11 +212,12 @@ export function SidePanelApp() {
           </div>
         )}
 
-        {activeAnalysis?.status === 'complete' && activeAnalysis.result && (
+        {displayedResult && (
           <SummaryView
-            result={activeAnalysis.result}
-            url={activeAnalysis.url}
-            analyzedAt={activeAnalysis.analyzedAt}
+            result={displayedResult.result}
+            url={displayedResult.url}
+            title={displayedResult.title}
+            analyzedAt={displayedResult.analyzedAt}
           />
         )}
 
@@ -219,6 +283,23 @@ export function SidePanelApp() {
                 </Button>
               </form>
             </section>
+
+            {history.length > 0 && (
+              <section className="border-t border-gray-200 pt-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-gray-700">Recent analyses</h2>
+                  <Button variant="ghost" size="icon" onPress={handleClearHistory} aria-label="Clear history">
+                    <Trash2 size={14} aria-hidden="true" />
+                  </Button>
+                </div>
+                <HistoryList
+                  entries={history}
+                  selectedId={selectedHistoryId}
+                  onSelect={handleSelectHistory}
+                  onDelete={handleDeleteHistory}
+                />
+              </section>
+            )}
           </div>
         )}
       </div>

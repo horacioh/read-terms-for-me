@@ -6,12 +6,12 @@ A privacy-first Chrome extension that detects **Terms of Service** links on any 
 
 - **Passive detection** — the extension icon shows a badge when a ToS link is found; no UI is injected into pages.
 - **One-click summarize** — open the popup, choose a detected link, and get a summary.
-- **Chrome side panel** — summaries and analysis are displayed in a dedicated side panel.
+- **Chrome side panel** — summaries and analysis are displayed in a dedicated side panel with a local history of previous runs.
 - **Rule-based scoring** — scores each ToS on privacy, user rights, transparency, and freedom using configurable regex rules.
 - **Privacy preferences** — configure preset and custom concerns in settings; the extension flags which ones are matched by the ToS.
-- **Custom prompts** — edit the LLM prompts for summary, preference analysis, and scoring.
+- **Custom prompts** — edit the LLM prompts for summary and preference analysis.
 - **BYOK or local LLMs** — supports OpenAI (bring your own key), DeepSeek, and Ollama (local).
-- **No browsing history** — the extension does not store page URLs, page titles, or analyzed documents. Only anonymous usage counts and matched preference categories are kept locally.
+- **Everything local** — analysis history, settings, and anonymous usage stats are stored in `chrome.storage.local` and never uploaded. The only data sent anywhere is the ToS text you choose to summarize, sent to the LLM provider you configure.
 
 ## Tech Stack
 
@@ -62,13 +62,14 @@ bun run build:watch
 3. Click the icon to see the detected links.
 4. Click **Summarize** on the desired link.
 5. The Chrome side panel opens with the summary, key points, red flags, privacy-preference analysis, and a rule-based score.
+6. Revisit previous analyses from the local history list at the bottom of the side panel.
 
 ## Privacy Notes
 
 - The extension does not send any data to a third party until you click **Summarize**.
 - API keys are stored locally in `chrome.storage.local`.
-- The extension does not store your browsing history, page URLs, page titles, or analyzed documents.
-- Anonymous usage statistics (total analyses and matched preference category counts) are stored locally and can be reset in settings.
+- Analysis history, settings, and anonymous usage statistics are stored locally in `chrome.storage.local` and are never uploaded.
+- History expires automatically after the configured number of days (default 30) and can be cleared at any time in settings.
 - The extension only fetches the Terms of Service URL you explicitly select.
 
 ## Project Structure

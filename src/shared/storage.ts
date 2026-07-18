@@ -1,4 +1,4 @@
-import type { Settings, PrivacyPreference, ScoringRule, UsageStats } from './types';
+import type { Settings, PrivacyPreference, ScoringRule, UsageStats, HistoryEntry } from './types';
 import { DEFAULT_SCORING_RULES } from './scoring/rules';
 
 const DEFAULT_PRIVACY_PREFERENCES: PrivacyPreference[] = [
@@ -75,6 +75,7 @@ const DEFAULT_SETTINGS: Settings = {
   preferencesPrompt: DEFAULT_PREFERENCES_PROMPT,
   privacyPreferences: DEFAULT_PRIVACY_PREFERENCES,
   scoringRules: DEFAULT_SCORING_RULES,
+  historyExpirationDays: 30,
   consentGiven: false,
 };
 
@@ -129,6 +130,69 @@ export async function recordAnalysis(preferences: { preferenceId: string }[]): P
     stats.termMatches[preferenceId] = (stats.termMatches[preferenceId] ?? 0) + 1;
   }
   await chrome.storage.local.set({ usageStats: stats });
+}
+
+const HISTORY_KEY = 'analysisHistory';
+const MAX_HISTORY = 100;
+
+function now() {
+  return Date.now();
+}
+
+function computeExpiresAt(createdAt: number, ttlDays: number): number {
+  return createdAt + ttlDays * 24 * 60 * 60 * 1000;
+}
+
+function cleanHistory(entries: HistoryEntry[], ttlDays: number): HistoryEntry[] {
+  const cutoff = now() - ttlDays * 24 * 60 * 60 * 1000;
+  return entries
+    .filter((e) => e.createdAt >= cutoff && e.expiresAt > now())
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, MAX_HISTORY);
+}
+
+export async function getHistory(ttlDays?: number): Promise<HistoryEntry[]> {
+  const days = ttlDays ?? (await getSettings()).historyExpirationDays;
+  const result = await chrome.storage.local.get(HISTORY_KEY);
+  const entries = (result[HISTORY_KEY] as HistoryEntry[] | undefined) ?? [];
+  return cleanHistory(entries, days);
+}
+
+export async function addHistoryEntry(entry: HistoryEntry): Promise<void> {
+  const settings = await getSettings();
+  if (!entry.expiresAt) {
+    entry.expiresAt = computeExpiresAt(entry.createdAt, settings.historyExpirationDays);
+  }
+  const result = await chrome.storage.local.get(HISTORY_KEY);
+  const entries = (result[HISTORY_KEY] as HistoryEntry[] | undefined) ?? [];
+  const cleaned = cleanHistory(entries, settings.historyExpirationDays);
+  const exists = cleaned.findIndex((e) => e.id === entry.id);
+  if (exists >= 0) {
+    cleaned[exists] = entry;
+  } else {
+    cleaned.unshift(entry);
+  }
+  await chrome.storage.local.set({ [HISTORY_KEY]: cleanHistory(cleaned, settings.historyExpirationDays) });
+}
+
+export async function deleteHistoryEntry(id: string): Promise<void> {
+  const result = await chrome.storage.local.get(HISTORY_KEY);
+  const entries = (result[HISTORY_KEY] as HistoryEntry[] | undefined) ?? [];
+  await chrome.storage.local.set({ [HISTORY_KEY]: entries.filter((e) => e.id !== id) });
+}
+
+export async function clearHistory(): Promise<void> {
+  await chrome.storage.local.remove(HISTORY_KEY);
+}
+
+export async function getCachedAnalysis(url: string): Promise<HistoryEntry | null> {
+  const settings = await getSettings();
+  const result = await chrome.storage.local.get(HISTORY_KEY);
+  const entries = (result[HISTORY_KEY] as HistoryEntry[] | undefined) ?? [];
+  const match = entries
+    .filter((e) => e.url === url && e.expiresAt > now() && e.createdAt > now() - settings.historyExpirationDays * 24 * 60 * 60 * 1000)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  return match ?? null;
 }
 
 export function createDefaultPreference(): PrivacyPreference {

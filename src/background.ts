@@ -1,5 +1,5 @@
 import { callLLM } from './shared/llm';
-import { getSettings, recordAnalysis } from './shared/storage';
+import { getSettings, recordAnalysis, addHistoryEntry, getCachedAnalysis } from './shared/storage';
 import { extractTextFromHtml, truncateText } from './shared/extractor';
 import {
   buildSummaryPrompt,
@@ -8,7 +8,7 @@ import {
   parsePreferencesResponse,
 } from './shared/prompts';
 import { scoreDocument } from './shared/scoring/rules';
-import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, SummaryResult } from './shared/types';
+import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, SummaryResult, HistoryEntry } from './shared/types';
 
 const MAX_CHARS = 12000;
 
@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 
     if (analyzeMessage.windowId) {
       // sidePanel.open() must be called synchronously in the user-gesture context.
-      void chrome.sidePanel.open({ windowId: analyzeMessage.windowId });
+      void chrome.sidePanel.open({ windowId: analyzeMessage.windowId }).catch(() => {});
     }
 
     void (async () => {
@@ -62,9 +62,21 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 });
 
 async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
-  const { url } = message;
+  const { url, pageUrl, pageTitle } = message;
 
   const settings = await getSettings();
+
+  const cached = await getCachedAnalysis(url);
+  if (cached) {
+    await setActiveAnalysis({
+      status: 'complete',
+      url,
+      result: cached.summary,
+      analyzedAt: cached.createdAt,
+    });
+    return;
+  }
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not fetch Terms of Service: ${response.status} ${response.statusText}`);
@@ -106,7 +118,21 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   };
 
   await recordAnalysis(preferencesAnalysis.filter((p) => p.matched).map((p) => ({ preferenceId: p.preferenceId })));
-  await setActiveAnalysis({ status: 'complete', url, result: summary, analyzedAt: Date.now() });
+
+  const createdAt = Date.now();
+  const entry: HistoryEntry = {
+    id: crypto.randomUUID(),
+    url,
+    pageUrl,
+    pageTitle,
+    title: pageTitle || new URL(url).hostname || 'Terms of Service',
+    summary,
+    createdAt,
+    expiresAt: createdAt + settings.historyExpirationDays * 24 * 60 * 60 * 1000,
+  };
+  await addHistoryEntry(entry);
+
+  await setActiveAnalysis({ status: 'complete', url, result: summary, analyzedAt: createdAt });
 }
 
 chrome.action.onClicked.addListener((tab) => {

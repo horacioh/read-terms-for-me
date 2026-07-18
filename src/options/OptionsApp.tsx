@@ -16,6 +16,7 @@ import {
   getUsageStats,
   resetUsageStats,
   setConsent,
+  clearHistory,
 } from '../shared/storage';
 import { getDefaultBaseUrl, getDefaultModel } from '../shared/llm';
 import { DEFAULT_SCORING_RULES } from '../shared/scoring/rules';
@@ -188,6 +189,10 @@ export function OptionsApp() {
     updateField('consentGiven', true);
   }, []);
 
+  const handleClearHistory = useCallback(async () => {
+    await clearHistory();
+  }, []);
+
   const consentMissing = settings && !settings.consentGiven;
 
   const topMatches = useMemo(() => {
@@ -211,9 +216,8 @@ export function OptionsApp() {
         <section className="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <h2 className="text-lg font-semibold mb-2">Before you start</h2>
           <p className="text-sm text-gray-700 mb-4">
-            Read Terms For Me is privacy-first. It does not collect personal data or store your browsing history.
-            The only data kept locally is an anonymous count of analyses and which privacy preference categories were matched.
-            When you click Summarize, the selected Terms of Service text is sent to the LLM provider you choose.
+            Read Terms For Me keeps everything on your device. Your analysis history, settings, and anonymous usage counts are stored locally in your browser and are never uploaded.
+            When you click Summarize, only the selected Terms of Service text is sent to the LLM provider you choose.
           </p>
           <Button onPress={giveConsent}>I understand</Button>
         </section>
@@ -447,6 +451,30 @@ export function OptionsApp() {
             </Button>
           </div>
         )}
+      </section>
+
+      <section className="mb-8 rounded-lg border border-gray-200 p-4">
+        <h2 className="text-lg font-semibold mb-4">Local History</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          All analysis results, URLs, and page titles are stored locally in your browser. They are never uploaded.
+        </p>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="historyExpirationDays">Keep history for (days)</Label>
+            <Input
+              id="historyExpirationDays"
+              type="number"
+              min={1}
+              value={String(settings.historyExpirationDays)}
+              onChange={(value: string) => updateField('historyExpirationDays', parseInt(value, 10) || 30)}
+            />
+          </div>
+
+          <Button variant="secondary" size="sm" onPress={handleClearHistory}>
+            Clear all history
+          </Button>
+        </div>
       </section>
 
       <div className="flex items-center gap-4">

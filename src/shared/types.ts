@@ -20,6 +20,7 @@ export interface Settings {
   preferencesPrompt: string;
   privacyPreferences: PrivacyPreference[];
   scoringRules: ScoringRule[];
+  historyExpirationDays: number;
   consentGiven: boolean;
 }
 
@@ -81,6 +82,17 @@ export interface PreferenceAnalysis {
   explanation: string;
 }
 
+export interface HistoryEntry {
+  id: string;
+  url: string;
+  pageUrl?: string;
+  pageTitle?: string;
+  title: string;
+  summary: SummaryResult;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface UsageStats {
   totalAnalyses: number;
   termMatches: Record<string, number>;
@@ -90,6 +102,8 @@ export interface AnalyzeMessage {
   type: 'ANALYZE';
   url: string;
   windowId?: number;
+  pageUrl?: string;
+  pageTitle?: string;
 }
 
 export interface AnalyzeResultMessage {
