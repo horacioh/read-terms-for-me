@@ -1,9 +1,12 @@
 export type LLMProvider = 'openai' | 'ollama' | 'deepseek';
 
+export type ScoreCategory = 'privacy' | 'userRights' | 'transparency' | 'freedom';
+
 export interface ActiveAnalysis {
-  status: 'loading' | 'error';
+  status: 'loading' | 'error' | 'complete';
   url: string;
   message?: string;
+  result?: SummaryResult;
 }
 
 export interface Settings {
@@ -11,10 +14,12 @@ export interface Settings {
   apiKey: string;
   baseUrl: string;
   model: string;
-  summaryPrompt: string;
-  privacyPreferences: PrivacyPreference[];
-  historyExpirationDays: number;
   language: string;
+  summaryPrompt: string;
+  preferencesPrompt: string;
+  privacyPreferences: PrivacyPreference[];
+  scoringRules: ScoringRule[];
+  consentGiven: boolean;
 }
 
 export interface PrivacyPreference {
@@ -23,6 +28,18 @@ export interface PrivacyPreference {
   description: string;
   severity: 'block' | 'warn' | 'allow';
   userDescription?: string;
+  isCustom?: boolean;
+}
+
+export interface ScoringRule {
+  id: string;
+  category: ScoreCategory;
+  label: string;
+  description: string;
+  weight: number;
+  positive?: string[];
+  negative?: string[];
+  enabled: boolean;
   isCustom?: boolean;
 }
 
@@ -63,22 +80,31 @@ export interface PreferenceAnalysis {
   explanation: string;
 }
 
-export interface HistoryEntry {
-  id: string;
-  url: string;
-  pageUrl: string;
-  pageTitle: string;
-  title: string;
-  summary: SummaryResult;
-  createdAt: number;
+export interface UsageStats {
+  totalAnalyses: number;
+  termMatches: Record<string, number>;
 }
 
 export interface AnalyzeMessage {
   type: 'ANALYZE';
   url: string;
-  pageUrl: string;
-  pageTitle: string;
-  windowId: number;
+  windowId?: number;
+}
+
+export interface AnalyzeResultMessage {
+  type: 'ANALYZE_RESULT';
+  url: string;
+  result: SummaryResult;
+}
+
+export interface UpdateBadgeMessage {
+  type: 'UPDATE_BADGE';
+  count: number;
+  tabId: number | null;
+}
+
+export interface GetDetectedLinksMessage {
+  type: 'GET_DETECTED_LINKS';
 }
 
 export interface DetectedLinksMessage {
@@ -91,21 +117,11 @@ export interface ErrorMessage {
   message: string;
 }
 
-export interface AnalyzeResultMessage {
-  type: 'ANALYZE_RESULT';
-  entry: HistoryEntry;
-}
+export type BackgroundMessage =
+  | AnalyzeMessage
+  | UpdateBadgeMessage
+  | GetDetectedLinksMessage;
 
-export interface UpdateBadgeMessage {
-  type: 'UPDATE_BADGE';
-  count: number;
-  tabId: number | null;
-}
-
-export interface GetHistoryMessage {
-  type: 'GET_HISTORY';
-}
-
-export type BackgroundMessage = AnalyzeMessage | UpdateBadgeMessage | GetHistoryMessage;
 export type ContentMessage = DetectedLinksMessage;
+
 export type PopupMessage = AnalyzeResultMessage | ErrorMessage;

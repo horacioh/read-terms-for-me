@@ -1,15 +1,17 @@
 # Read Terms For Me
 
-A Chrome extension that detects **Terms of Service** links on any page, fetches the document, and produces a plain-language summary and privacy-preference analysis using a BYOK or local LLM.
+A privacy-first Chrome extension that detects **Terms of Service** links on any page, fetches the document, and produces a plain-language summary, a privacy-preference analysis, and a transparent, rule-based score.
 
 ## Features
 
 - **Passive detection** — the extension icon shows a badge when a ToS link is found; no UI is injected into pages.
 - **One-click summarize** — open the popup, choose a detected link, and get a summary.
-- **Chrome side panel** — summaries and analysis are displayed in a dedicated side panel with a searchable history.
+- **Chrome side panel** — summaries and analysis are displayed in a dedicated side panel.
+- **Rule-based scoring** — scores each ToS on privacy, user rights, transparency, and freedom using configurable regex rules.
 - **Privacy preferences** — configure preset and custom concerns in settings; the extension flags which ones are matched by the ToS.
-- **BYOK or local LLMs** — supports OpenAI (bring your own key) and Ollama (local).
-- **30-day history** — summaries are stored locally and expire after 30 days.
+- **Custom prompts** — edit the LLM prompts for summary, preference analysis, and scoring.
+- **BYOK or local LLMs** — supports OpenAI (bring your own key), DeepSeek, and Ollama (local).
+- **No browsing history** — the extension does not store page URLs, page titles, or analyzed documents. Only anonymous usage counts and matched preference categories are kept locally.
 
 ## Tech Stack
 
@@ -29,6 +31,9 @@ bun install
 # Build the extension
 bun run build
 
+# Build and package for the Chrome Web Store
+bun run build:zip
+
 # Watch mode for development
 bun run build:watch
 ```
@@ -47,6 +52,7 @@ bun run build:watch
 2. Choose a provider:
    - **Ollama** (default): install [Ollama](https://ollama.com/) and pull a model such as `llama3.2`. The extension uses `http://localhost:11434` by default.
    - **OpenAI**: set your API key and optionally a custom base URL. The default model is `gpt-4o-mini`.
+   - **DeepSeek**: set your API key and optionally a custom base URL.
 3. Save settings.
 
 ## Usage
@@ -55,34 +61,34 @@ bun run build:watch
 2. The extension icon shows a badge if a ToS link is detected.
 3. Click the icon to see the detected links.
 4. Click **Summarize** on the desired link.
-5. The Chrome side panel opens with the summary, key points, red flags, and a privacy-preference analysis.
-6. Past summaries are available in the side panel history.
+5. The Chrome side panel opens with the summary, key points, red flags, privacy-preference analysis, and a rule-based score.
 
 ## Privacy Notes
 
-- The extension does not send any page data to a third party until you click **Summarize**.
+- The extension does not send any data to a third party until you click **Summarize**.
 - API keys are stored locally in `chrome.storage.local`.
-- All summaries and history are stored locally and expire after the configured number of days (default 30).
+- The extension does not store your browsing history, page URLs, page titles, or analyzed documents.
+- Anonymous usage statistics (total analyses and matched preference category counts) are stored locally and can be reset in settings.
 - The extension only fetches the Terms of Service URL you explicitly select.
 
 ## Project Structure
 
 ```
 read-terms-for-me/
-├── popup/popup.html            # popup entry HTML
 ├── sidepanel/sidepanel.html    # side panel entry HTML
 ├── options/options.html        # settings page entry HTML
 ├── src/
 │   ├── background.ts           # service worker
 │   ├── content.ts              # content script for ToS detection
-│   ├── popup/                  # popup React app
 │   ├── sidepanel/              # side panel React app
 │   ├── options/                # settings React app
-│   ├── shared/                 # types, storage, LLM providers, prompts
+│   ├── shared/                 # types, storage, LLM providers, prompts, scoring rules
 │   └── components/             # shared UI components
 ├── public/
 │   ├── manifest.json           # Chrome extension manifest
-│   └── icons/icon.svg          # extension icon
+│   └── icons/                  # extension icons
+├── docs/
+│   └── privacy.html            # privacy policy page
 └── dist/                       # built extension
 ```
 
