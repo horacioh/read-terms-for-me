@@ -116,6 +116,12 @@ export async function resetUsageStats(): Promise<void> {
   await chrome.storage.local.set({ usageStats: { totalAnalyses: 0, termMatches: {} } });
 }
 
+export async function setConsent(value: boolean): Promise<void> {
+  const result = await chrome.storage.local.get('settings');
+  const stored = (result.settings ?? {}) as Partial<Settings>;
+  await chrome.storage.local.set({ settings: { ...DEFAULT_SETTINGS, ...stored, consentGiven: value } });
+}
+
 export async function recordAnalysis(preferences: { preferenceId: string }[]): Promise<void> {
   const stats = await getUsageStats();
   stats.totalAnalyses += 1;

@@ -7,6 +7,7 @@ export interface ActiveAnalysis {
   url: string;
   message?: string;
   result?: SummaryResult;
+  analyzedAt?: number;
 }
 
 export interface Settings {

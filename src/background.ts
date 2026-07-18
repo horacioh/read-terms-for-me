@@ -106,7 +106,7 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
   };
 
   await recordAnalysis(preferencesAnalysis.filter((p) => p.matched).map((p) => ({ preferenceId: p.preferenceId })));
-  await setActiveAnalysis({ status: 'complete', url, result: summary });
+  await setActiveAnalysis({ status: 'complete', url, result: summary, analyzedAt: Date.now() });
 }
 
 chrome.action.onClicked.addListener((tab) => {

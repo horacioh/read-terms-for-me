@@ -15,6 +15,7 @@ import {
   DEFAULT_PREFERENCES_PROMPT,
   getUsageStats,
   resetUsageStats,
+  setConsent,
 } from '../shared/storage';
 import { getDefaultBaseUrl, getDefaultModel } from '../shared/llm';
 import { DEFAULT_SCORING_RULES } from '../shared/scoring/rules';
@@ -182,6 +183,11 @@ export function OptionsApp() {
     await loadStats();
   }, [loadStats]);
 
+  const giveConsent = useCallback(async () => {
+    await setConsent(true);
+    updateField('consentGiven', true);
+  }, []);
+
   const consentMissing = settings && !settings.consentGiven;
 
   const topMatches = useMemo(() => {
@@ -209,7 +215,7 @@ export function OptionsApp() {
             The only data kept locally is an anonymous count of analyses and which privacy preference categories were matched.
             When you click Summarize, the selected Terms of Service text is sent to the LLM provider you choose.
           </p>
-          <Button onPress={() => updateField('consentGiven', true)}>I understand</Button>
+          <Button onPress={giveConsent}>I understand</Button>
         </section>
       )}
 

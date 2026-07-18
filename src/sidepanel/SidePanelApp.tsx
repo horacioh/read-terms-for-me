@@ -13,7 +13,6 @@ export function SidePanelApp() {
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null);
   const [manualUrl, setManualUrl] = useState('');
   const [loading, setLoading] = useState(true);
-  const [analyzedAt, setAnalyzedAt] = useState<number | undefined>(undefined);
 
   const loadLinks = useCallback(async () => {
     try {
@@ -61,11 +60,7 @@ export function SidePanelApp() {
 
   useEffect(() => {
     chrome.storage.session.get('activeAnalysis').then((result) => {
-      const value: ActiveAnalysis | null = result.activeAnalysis ?? null;
-      setActiveAnalysis(value);
-      if (value?.status === 'complete') {
-        setAnalyzedAt(Date.now());
-      }
+      setActiveAnalysis((result.activeAnalysis as ActiveAnalysis | null) ?? null);
     });
 
     const handleStorageChange = (
@@ -73,11 +68,7 @@ export function SidePanelApp() {
       areaName: string
     ) => {
       if (areaName !== 'session' || !changes.activeAnalysis) return;
-      const newValue: ActiveAnalysis | null = changes.activeAnalysis.newValue ?? null;
-      setActiveAnalysis(newValue);
-      if (newValue?.status === 'complete') {
-        setAnalyzedAt(Date.now());
-      }
+      setActiveAnalysis((changes.activeAnalysis.newValue as ActiveAnalysis | null) ?? null);
     };
 
     chrome.storage.onChanged.addListener(handleStorageChange);
@@ -162,7 +153,7 @@ export function SidePanelApp() {
           <SummaryView
             result={activeAnalysis.result}
             url={activeAnalysis.url}
-            analyzedAt={analyzedAt}
+            analyzedAt={activeAnalysis.analyzedAt}
           />
         )}
 
