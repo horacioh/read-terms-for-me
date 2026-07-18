@@ -356,6 +356,7 @@ export function scoreDocument(text: string, rules: ScoringRule[]): TermsScores {
     let matchedNegative = false;
 
     for (const pattern of rule.positive ?? []) {
+      if (!pattern.trim()) continue;
       try {
         const re = new RegExp(pattern, 'i');
         if (re.test(normalized)) {
@@ -368,6 +369,7 @@ export function scoreDocument(text: string, rules: ScoringRule[]): TermsScores {
     }
 
     for (const pattern of rule.negative ?? []) {
+      if (!pattern.trim()) continue;
       try {
         const re = new RegExp(pattern, 'i');
         if (re.test(normalized)) {
