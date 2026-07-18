@@ -185,14 +185,20 @@ export async function clearHistory(): Promise<void> {
   await chrome.storage.local.remove(HISTORY_KEY);
 }
 
-export async function getCachedAnalysis(url: string): Promise<HistoryEntry | null> {
+export async function getCachedAnalysis(url: string, textHash?: string): Promise<HistoryEntry | null> {
   const settings = await getSettings();
   const result = await chrome.storage.local.get(HISTORY_KEY);
   const entries = (result[HISTORY_KEY] as HistoryEntry[] | undefined) ?? [];
-  const match = entries
-    .filter((e) => e.url === url && e.expiresAt > now() && e.createdAt > now() - settings.historyExpirationDays * 24 * 60 * 60 * 1000)
-    .sort((a, b) => b.createdAt - a.createdAt)[0];
-  return match ?? null;
+  let matches = entries.filter(
+    (e) =>
+      e.url === url &&
+      e.expiresAt > now() &&
+      e.createdAt > now() - settings.historyExpirationDays * 24 * 60 * 60 * 1000
+  );
+  if (textHash) {
+    matches = matches.filter((e) => e.textHash === textHash);
+  }
+  return matches.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
 }
 
 export function createDefaultPreference(): PrivacyPreference {

@@ -88,6 +88,7 @@ export interface HistoryEntry {
   pageUrl?: string;
   pageTitle?: string;
   title: string;
+  textHash?: string;
   summary: SummaryResult;
   createdAt: number;
   expiresAt: number;
@@ -104,6 +105,7 @@ export interface AnalyzeMessage {
   windowId?: number;
   pageUrl?: string;
   pageTitle?: string;
+  force?: boolean;
 }
 
 export interface AnalyzeResultMessage {

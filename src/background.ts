@@ -12,6 +12,14 @@ import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, SummaryResult, 
 
 const MAX_CHARS = 12000;
 
+async function sha256(text: string): Promise<string> {
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const bytes = new Uint8Array(buffer);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function setActiveAnalysis(value: ActiveAnalysis | null): Promise<void> {
   return chrome.storage.session.set({ activeAnalysis: value });
 }
@@ -62,20 +70,9 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 });
 
 async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
-  const { url, pageUrl, pageTitle } = message;
+  const { url, pageUrl, pageTitle, force } = message;
 
   const settings = await getSettings();
-
-  const cached = await getCachedAnalysis(url);
-  if (cached) {
-    await setActiveAnalysis({
-      status: 'complete',
-      url,
-      result: cached.summary,
-      analyzedAt: cached.createdAt,
-    });
-    return;
-  }
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -84,6 +81,20 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
 
   const html = await response.text();
   const text = truncateText(extractTextFromHtml(html), MAX_CHARS);
+  const textHash = await sha256(text);
+
+  if (!force) {
+    const cached = await getCachedAnalysis(url, textHash);
+    if (cached) {
+      await setActiveAnalysis({
+        status: 'complete',
+        url,
+        result: cached.summary,
+        analyzedAt: cached.createdAt,
+      });
+      return;
+    }
+  }
 
   const [summaryRes, prefsRes] = await Promise.all([
     callLLM({
@@ -126,6 +137,7 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
     pageUrl,
     pageTitle,
     title: pageTitle || new URL(url).hostname || 'Terms of Service',
+    textHash,
     summary,
     createdAt,
     expiresAt: createdAt + settings.historyExpirationDays * 24 * 60 * 60 * 1000,

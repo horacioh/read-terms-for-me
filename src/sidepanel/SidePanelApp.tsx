@@ -91,15 +91,16 @@ export function SidePanelApp() {
   }, [loadHistory]);
 
   const handleAnalyze = useCallback(
-    (url: string) => {
+    (url: string, force = false, source?: { pageUrl?: string; pageTitle?: string }) => {
       if (!currentTab?.windowId) return;
       setSelectedHistoryId(null);
       void chrome.runtime.sendMessage({
         type: 'ANALYZE',
         url,
         windowId: currentTab.windowId,
-        pageUrl: currentTab.url,
-        pageTitle: currentTab.title,
+        pageUrl: source?.pageUrl ?? currentTab.url,
+        pageTitle: source?.pageTitle ?? currentTab.title,
+        force,
       });
     },
     [currentTab]
@@ -173,6 +174,15 @@ export function SidePanelApp() {
     setSelectedHistoryId(null);
   }, []);
 
+  const handleReanalyze = useCallback(() => {
+    if (!displayedResult?.url) return;
+    const source = selectedHistory ?? undefined;
+    handleAnalyze(displayedResult.url, true, {
+      pageUrl: source?.pageUrl,
+      pageTitle: source?.pageTitle,
+    });
+  }, [displayedResult, selectedHistory, handleAnalyze]);
+
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
@@ -191,6 +201,11 @@ export function SidePanelApp() {
             Read Terms For Me
           </h1>
         </div>
+        {displayedResult && (
+          <Button size="sm" onPress={handleReanalyze}>
+            Re-analyze
+          </Button>
+        )}
         <Button variant="ghost" size="icon" onPress={openOptions} aria-label="Open settings">
           <Settings size={18} aria-hidden="true" />
         </Button>
