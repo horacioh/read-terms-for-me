@@ -3,6 +3,10 @@ node_modules/
 
 # Build output
 dist/
+read-terms-for-me.zip
+
+# Generated JS artifacts next to .ts files
+src/**/*.js
 
 # Logs
 *.log

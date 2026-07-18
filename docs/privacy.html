@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy - Read Terms For Me</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.6;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 2rem;
+        color: #1f2937;
+      }
+      h1 { font-size: 1.75rem; }
+      h2 { font-size: 1.25rem; margin-top: 1.5rem; }
+      ul { padding-left: 1.25rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy for Read Terms For Me</h1>
+    <p><em>Last updated: 2026-07-18</em></p>
+
+    <h2>Overview</h2>
+    <p>
+      Read Terms For Me is a Chrome extension that helps you understand Terms of Service documents. The guiding principle is that <strong>everything stays on your device</strong> unless you explicitly choose to send a document to the LLM provider you configure.
+    </p>
+
+    <h2>What stays on your device</h2>
+    <p>All of the following are stored <strong>locally</strong> in your browser using <code>chrome.storage.local</code>:</p>
+    <ul>
+      <li>
+        <strong>Extension settings</strong> — provider, model, base URL, API key, language, custom prompts, privacy preferences, scoring rules, and consent status.
+      </li>
+      <li>
+        <strong>Local analysis history</strong> — the URLs you analyze, the page title/URL where the Terms of Service link was found, the summary, scores, and preference analysis. This lets you view previous runs and avoid re-analyzing the same URL.
+      </li>
+      <li>
+        <strong>Anonymous usage statistics</strong> — only a count of total analyses and how many times each privacy-preference category was matched.
+      </li>
+    </ul>
+    <p>You can view, clear, or reset this local data at any time from the extension settings. History expires automatically after the number of days you configure (default 30).</p>
+
+    <h2>What is sent to third parties</h2>
+    <p>
+      When you click <strong>Summarize</strong>, the extension fetches the selected Terms of Service document and sends its text to the LLM provider you configured (OpenAI, DeepSeek, or Ollama). This happens only when you explicitly request an analysis.
+    </p>
+    <ul>
+      <li>
+        If you use <strong>Ollama</strong>, the request is sent to your local machine (<code>http://localhost:11434</code> by default) and does not leave your device.
+      </li>
+      <li>
+        If you use <strong>OpenAI</strong> or <strong>DeepSeek</strong>, the request is sent to their API using the API key you provided. The API key is stored locally in your browser and is only sent to the provider you selected.
+      </li>
+    </ul>
+    <p>No page URLs, browsing history, prompts, or analysis results are sent to any third party.</p>
+
+    <h2>Your rights</h2>
+    <p>You can:</p>
+    <ul>
+      <li>View and reset anonymous usage statistics in the extension settings.</li>
+      <li>Clear your local analysis history in the extension settings.</li>
+      <li>Delete all stored data by removing the extension from Chrome.</li>
+      <li>Disable or uninstall the extension at any time.</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <p>If you have questions about this privacy policy, please open an issue on the project repository.</p>
+  </body>
+</html>

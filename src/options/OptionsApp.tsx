@@ -1,13 +1,26 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { TextArea } from '../components/ui/TextArea';
 import { Label } from '../components/ui/Label';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { getSettings, setSettings, resetSettings, createDefaultPreference } from '../shared/storage';
+import {
+  getSettings,
+  setSettings,
+  resetSettings,
+  createDefaultPreference,
+  createDefaultRule,
+  DEFAULT_SUMMARY_PROMPT,
+  DEFAULT_PREFERENCES_PROMPT,
+  getUsageStats,
+  resetUsageStats,
+  setConsent,
+  clearHistory,
+} from '../shared/storage';
 import { getDefaultBaseUrl, getDefaultModel } from '../shared/llm';
-import type { Settings, PrivacyPreference } from '../shared/types';
+import { DEFAULT_SCORING_RULES } from '../shared/scoring/rules';
+import type { Settings, PrivacyPreference, ScoringRule, ScoreCategory, UsageStats } from '../shared/types';
 
 const providers = [
   { value: 'ollama', label: 'Ollama (local)' },
@@ -21,16 +34,47 @@ const severities = [
   { value: 'allow', label: 'Allow — acceptable' },
 ];
 
+const categories = [
+  { value: 'privacy', label: 'Privacy' },
+  { value: 'userRights', label: 'User Rights' },
+  { value: 'transparency', label: 'Transparency' },
+  { value: 'freedom', label: 'Freedom' },
+];
+
+function validatePrompts(settings: Settings): string | null {
+  if (!settings.summaryPrompt.includes('{{document}}')) {
+    return 'Summary prompt must include {{document}}.';
+  }
+  if (!settings.preferencesPrompt.includes('{{document}}')) {
+    return 'Preferences prompt must include {{document}}.';
+  }
+  if (!settings.preferencesPrompt.includes('{{preferences}}')) {
+    return 'Preferences prompt must include {{preferences}}.';
+  }
+  return null;
+}
+
 export function OptionsApp() {
   const [settings, setLocalSettings] = useState<Settings | null>(null);
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getSettings().then(setLocalSettings).catch((err) => {
-      setError(err instanceof Error ? err.message : 'Failed to load settings');
-    });
+  const loadStats = useCallback(async () => {
+    const stats = await getUsageStats();
+    setUsageStats(stats);
   }, []);
+
+  useEffect(() => {
+    getSettings()
+      .then((s) => {
+        setLocalSettings(s);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load settings');
+      });
+    void loadStats();
+  }, [loadStats]);
 
   const updateField = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
     setLocalSettings((prev) => {
@@ -49,9 +93,7 @@ export function OptionsApp() {
       if (!prev) return prev;
       return {
         ...prev,
-        privacyPreferences: prev.privacyPreferences.map((p) =>
-          p.id === id ? { ...p, ...patch } : p
-        ),
+        privacyPreferences: prev.privacyPreferences.map((p) => (p.id === id ? { ...p, ...patch } : p)),
       };
     });
   }, []);
@@ -76,11 +118,54 @@ export function OptionsApp() {
     });
   }, []);
 
+  const updateRule = useCallback((id: string, patch: Partial<ScoringRule>) => {
+    setLocalSettings((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        scoringRules: prev.scoringRules.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+      };
+    });
+  }, []);
+
+  const removeRule = useCallback((id: string) => {
+    setLocalSettings((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        scoringRules: prev.scoringRules.filter((r) => r.id !== id),
+      };
+    });
+  }, []);
+
+  const addRule = useCallback(() => {
+    setLocalSettings((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        scoringRules: [...prev.scoringRules, createDefaultRule()],
+      };
+    });
+  }, []);
+
+  const resetRules = useCallback(() => {
+    setLocalSettings((prev) => {
+      if (!prev) return prev;
+      return { ...prev, scoringRules: DEFAULT_SCORING_RULES };
+    });
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!settings) return;
+    const validation = validatePrompts(settings);
+    if (validation) {
+      setError(validation);
+      return;
+    }
     try {
       await setSettings(settings);
       setSaved(true);
+      setError(null);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
@@ -91,7 +176,31 @@ export function OptionsApp() {
     await resetSettings();
     const fresh = await getSettings();
     setLocalSettings(fresh);
+    await loadStats();
+  }, [loadStats]);
+
+  const handleResetStats = useCallback(async () => {
+    await resetUsageStats();
+    await loadStats();
+  }, [loadStats]);
+
+  const giveConsent = useCallback(async () => {
+    await setConsent(true);
+    updateField('consentGiven', true);
   }, []);
+
+  const handleClearHistory = useCallback(async () => {
+    await clearHistory();
+  }, []);
+
+  const consentMissing = settings && !settings.consentGiven;
+
+  const topMatches = useMemo(() => {
+    if (!usageStats) return [];
+    return Object.entries(usageStats.termMatches)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+  }, [usageStats]);
 
   if (!settings) {
     return <div className="p-8">Loading settings...</div>;
@@ -103,9 +212,19 @@ export function OptionsApp() {
 
       {error && <ErrorMessage message={error} />}
 
+      {consentMissing && (
+        <section className="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <h2 className="text-lg font-semibold mb-2">Before you start</h2>
+          <p className="text-sm text-gray-700 mb-4">
+            Read Terms For Me keeps everything on your device. Your analysis history, settings, and anonymous usage counts are stored locally in your browser and are never uploaded.
+            When you click Summarize, only the selected Terms of Service text is sent to the LLM provider you choose.
+          </p>
+          <Button onPress={giveConsent}>I understand</Button>
+        </section>
+      )}
+
       <section className="mb-8 rounded-lg border border-gray-200 p-4">
         <h2 className="text-lg font-semibold mb-4">LLM Provider</h2>
-
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="provider">Provider</Label>
@@ -148,7 +267,7 @@ export function OptionsApp() {
                 placeholder="sk-..."
               />
               <p className="text-xs text-gray-500">
-                Your API key is stored locally in the browser. It is never sent anywhere except to the provider you configured.
+                Your API key is stored locally in the browser. It is only sent to the provider you configured.
               </p>
             </div>
           )}
@@ -166,25 +285,51 @@ export function OptionsApp() {
       </section>
 
       <section className="mb-8 rounded-lg border border-gray-200 p-4">
-        <h2 className="text-lg font-semibold mb-4">Summary Prompt</h2>
-        <div className="grid gap-2">
-          <Label htmlFor="summaryPrompt">System Prompt</Label>
-          <TextArea
-            id="summaryPrompt"
-            value={settings.summaryPrompt}
-            onChange={(value: string) => updateField('summaryPrompt', value)}
-            rows={10}
-          />
-          <p className="text-xs text-gray-500">
-            Use {'{{document}}'} to insert the Terms of Service text and {'{{language}}'} for the language.
-          </p>
+        <h2 className="text-lg font-semibold mb-4">Prompts</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Edit the prompts sent to your LLM. Default prompts are used if you reset.
+        </p>
+
+        <div className="space-y-6">
+          <div className="grid gap-2">
+            <Label htmlFor="summaryPrompt">Summary Prompt</Label>
+            <TextArea
+              id="summaryPrompt"
+              value={settings.summaryPrompt}
+              onChange={(value: string) => updateField('summaryPrompt', value)}
+              rows={8}
+            />
+            <p className="text-xs text-gray-500">Required placeholder: {'{{document}}'}, optional: {'{{language}}'}</p>
+            <Button variant="ghost" size="sm" onPress={() => updateField('summaryPrompt', DEFAULT_SUMMARY_PROMPT)}>
+              Reset to default
+            </Button>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="preferencesPrompt">Preferences Prompt</Label>
+            <TextArea
+              id="preferencesPrompt"
+              value={settings.preferencesPrompt}
+              onChange={(value: string) => updateField('preferencesPrompt', value)}
+              rows={8}
+            />
+            <p className="text-xs text-gray-500">Required placeholders: {'{{preferences}}'}, {'{{document}}'}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => updateField('preferencesPrompt', DEFAULT_PREFERENCES_PROMPT)}
+            >
+              Reset to default
+            </Button>
+          </div>
+
         </div>
       </section>
 
       <section className="mb-8 rounded-lg border border-gray-200 p-4">
         <h2 className="text-lg font-semibold mb-4">Privacy Preferences</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Mark what you care about. The extension will check each analyzed Terms of Service against these preferences and warn you about matches.
+          Mark what you care about. The extension checks each analyzed Terms of Service against these preferences.
         </p>
 
         <div className="space-y-4">
@@ -217,9 +362,7 @@ export function OptionsApp() {
                   <Select
                     id={`pref-severity-${pref.id}`}
                     value={pref.severity}
-                    onChange={(value: string) =>
-                      updatePreference(pref.id, { severity: value as PrivacyPreference['severity'] })
-                    }
+                    onChange={(value: string) => updatePreference(pref.id, { severity: value as PrivacyPreference['severity'] })}
                     options={severities}
                   />
                 </div>
@@ -250,16 +393,87 @@ export function OptionsApp() {
       </section>
 
       <section className="mb-8 rounded-lg border border-gray-200 p-4">
-        <h2 className="text-lg font-semibold mb-4">History</h2>
-        <div className="grid gap-2">
-          <Label htmlFor="historyExpiration">Keep summaries for (days)</Label>
-          <Input
-            id="historyExpiration"
-            type="number"
-            min={1}
-            value={String(settings.historyExpirationDays)}
-            onChange={(value: string) => updateField('historyExpirationDays', parseInt(value, 10) || 30)}
-          />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Scoring Rules</h2>
+          <Button variant="ghost" size="sm" onPress={resetRules}>
+            Reset to defaults
+          </Button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Enable or disable built-in signals, or add your own regex-based rules. Scores start at 50 per category and adjust by each rule's weight.
+        </p>
+
+        <div className="space-y-4">
+          {settings.scoringRules.map((rule) => (
+            <RuleEditor
+              key={rule.id}
+              rule={rule}
+              onChange={(patch) => updateRule(rule.id, patch)}
+              onRemove={() => removeRule(rule.id)}
+            />
+          ))}
+
+          <Button variant="secondary" onPress={addRule}>
+            Add custom rule
+          </Button>
+        </div>
+      </section>
+
+      <section className="mb-8 rounded-lg border border-gray-200 p-4">
+        <h2 className="text-lg font-semibold mb-4">Anonymous Usage Stats</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Only an anonymous count of analyses and matched privacy-preference categories are stored locally.
+        </p>
+
+        {usageStats && (
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Total analyses</Label>
+              <p className="text-2xl font-semibold">{usageStats.totalAnalyses}</p>
+            </div>
+
+            {topMatches.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Top matched categories</Label>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  {topMatches.map(([id, count]) => (
+                    <li key={id} className="flex justify-between">
+                      <span>{id}</span>
+                      <span>{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <Button variant="secondary" size="sm" onPress={handleResetStats}>
+              Reset anonymous stats
+            </Button>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-8 rounded-lg border border-gray-200 p-4">
+        <h2 className="text-lg font-semibold mb-4">Local History</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          All analysis results, URLs, and page titles are stored locally in your browser. They are never uploaded.
+        </p>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="historyExpirationDays">Keep history for (days)</Label>
+            <Input
+              id="historyExpirationDays"
+              type="number"
+              min={1}
+              value={String(settings.historyExpirationDays)}
+              onChange={(value: string) => updateField('historyExpirationDays', parseInt(value, 10) || 30)}
+            />
+          </div>
+
+          <Button variant="secondary" size="sm" onPress={handleClearHistory}>
+            Clear all history
+          </Button>
         </div>
       </section>
 
@@ -269,6 +483,108 @@ export function OptionsApp() {
           Reset to defaults
         </Button>
       </div>
+    </div>
+  );
+}
+
+interface RuleEditorProps {
+  rule: ScoringRule;
+  onChange: (patch: Partial<ScoringRule>) => void;
+  onRemove: () => void;
+}
+
+function RuleEditor({ rule, onChange, onRemove }: RuleEditorProps) {
+  const isBuiltIn = !rule.isCustom;
+
+  return (
+    <div className="rounded-md border border-gray-200 p-3 space-y-3">
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          id={`rule-enabled-${rule.id}`}
+          checked={rule.enabled}
+          onChange={(e) => onChange({ enabled: e.target.checked })}
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+        />
+        <div className="flex-1 grid gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-label-${rule.id}`}>Label</Label>
+            <Input
+              id={`rule-label-${rule.id}`}
+              value={rule.label}
+              disabled={isBuiltIn}
+              onChange={(value: string) => onChange({ label: value })}
+              placeholder="Rule label"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-desc-${rule.id}`}>Description</Label>
+            <TextArea
+              id={`rule-desc-${rule.id}`}
+              value={rule.description}
+              disabled={isBuiltIn}
+              onChange={(value: string) => onChange({ description: value })}
+              rows={2}
+              placeholder="What this rule looks for"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-category-${rule.id}`}>Category</Label>
+            <Select
+              id={`rule-category-${rule.id}`}
+              value={rule.category}
+              disabled={isBuiltIn}
+              onChange={(value: string) => onChange({ category: value as ScoreCategory })}
+              options={categories}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-weight-${rule.id}`}>Weight</Label>
+            <Input
+              id={`rule-weight-${rule.id}`}
+              type="number"
+              disabled={isBuiltIn}
+              value={String(rule.weight)}
+              onChange={(value: string) => onChange({ weight: Math.max(0, parseInt(value, 10) || 0) })}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-positive-${rule.id}`}>Positive signals (one regex per line)</Label>
+            <TextArea
+              id={`rule-positive-${rule.id}`}
+              value={(rule.positive ?? ['']).join('\n')}
+              disabled={isBuiltIn}
+              onChange={(value: string) => onChange({ positive: value.split('\n').map((s) => s.trim()) })}
+              rows={3}
+              placeholder="Regex patterns that improve the score"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`rule-negative-${rule.id}`}>Negative signals (one regex per line)</Label>
+            <TextArea
+              id={`rule-negative-${rule.id}`}
+              value={(rule.negative ?? ['']).join('\n')}
+              disabled={isBuiltIn}
+              onChange={(value: string) => onChange({ negative: value.split('\n').map((s) => s.trim()) })}
+              rows={3}
+              placeholder="Regex patterns that reduce the score"
+            />
+          </div>
+        </div>
+      </div>
+
+      {!isBuiltIn && (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" onPress={onRemove}>
+            Remove
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

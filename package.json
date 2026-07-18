@@ -1,11 +1,12 @@
 {
   "name": "read-terms-for-me",
-  "version": "0.1.0",
-  "description": "Chrome extension that detects Terms of Service links and summarizes them using BYOK or local LLMs",
+  "version": "0.2.0",
+  "description": "Chrome extension that detects Terms of Service links and scores them with configurable privacy rules",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:zip": "bun run build && rm -f read-terms-for-me.zip && cd dist && zip -r ../read-terms-for-me.zip .",
     "build:watch": "vite build --watch",
     "lint": "tsc --noEmit"
   },

@@ -1,42 +1,47 @@
 import { callLLM } from './shared/llm';
-import { getSettings, addHistoryEntry } from './shared/storage';
+import { getSettings, recordAnalysis, addHistoryEntry, getCachedAnalysis } from './shared/storage';
 import { extractTextFromHtml, truncateText } from './shared/extractor';
-import { buildSummaryPrompt, buildPreferencesPrompt, buildScoresPrompt, parseSummaryResponse, parsePreferencesResponse, parseScoresResponse } from './shared/prompts';
-import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, HistoryEntry, SummaryResult } from './shared/types';
+import {
+  buildSummaryPrompt,
+  buildPreferencesPrompt,
+  parseSummaryResponse,
+  parsePreferencesResponse,
+} from './shared/prompts';
+import { scoreDocument } from './shared/scoring/rules';
+import type { ActiveAnalysis, AnalyzeMessage, BackgroundMessage, SummaryResult, HistoryEntry } from './shared/types';
 
 const MAX_CHARS = 12000;
 
+async function sha256(text: string): Promise<string> {
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const bytes = new Uint8Array(buffer);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function setActiveAnalysis(value: ActiveAnalysis | null): Promise<void> {
-  console.log('[RTFM:bg] setActiveAnalysis:', JSON.stringify(value));
-  return chrome.storage.local.set({ activeAnalysis: value });
+  return chrome.storage.session.set({ activeAnalysis: value });
 }
 
 chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendResponse) => {
   if (message.type === 'ANALYZE') {
-    console.log('[RTFM:bg] ANALYZE received, url:', message.url, 'windowId:', message.windowId);
+    const analyzeMessage = message as AnalyzeMessage;
 
-    // sidePanel.open() must be called synchronously in the user-gesture context
-    void chrome.sidePanel.open({ windowId: message.windowId })
-      .then(() => console.log('[RTFM:bg] sidePanel.open succeeded'))
-      .catch((e) => console.warn('[RTFM:bg] sidePanel.open failed:', e));
+    if (analyzeMessage.windowId) {
+      // sidePanel.open() must be called synchronously in the user-gesture context.
+      void chrome.sidePanel.open({ windowId: analyzeMessage.windowId }).catch(() => {});
+    }
 
     void (async () => {
       try {
-        await setActiveAnalysis({ status: 'loading', url: message.url });
-        console.log('[RTFM:bg] activeAnalysis set to loading');
-      } catch (e) {
-        console.error('[RTFM:bg] failed to set activeAnalysis:', e);
-      }
-
-      try {
-        await handleAnalyze(message);
-        console.log('[RTFM:bg] handleAnalyze succeeded');
-        await setActiveAnalysis(null);
+        await setActiveAnalysis({ status: 'loading', url: analyzeMessage.url });
+        await handleAnalyze(analyzeMessage);
       } catch (err) {
         console.error('[RTFM:bg] handleAnalyze failed:', err);
         await setActiveAnalysis({
           status: 'error',
-          url: message.url,
+          url: analyzeMessage.url,
           message: err instanceof Error ? err.message : 'Unknown error',
         });
       }
@@ -46,11 +51,9 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
     return false;
   }
 
-  if (message.type === 'GET_HISTORY') {
-    chrome.storage.local.get('history').then((result) => {
-      sendResponse({ type: 'HISTORY', history: result.history ?? [] });
-    });
-    return true;
+  if (message.type === 'GET_DETECTED_LINKS') {
+    // Content script handles this directly; background just echoes to keep the listener shape clear.
+    return false;
   }
 
   if (message.type === 'UPDATE_BADGE') {
@@ -67,12 +70,10 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, sender, sendRe
 });
 
 async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
-  const { url, pageUrl, pageTitle } = message;
-  console.log('[RTFM:bg] handleAnalyze start, fetching settings...');
-  const settings = await getSettings();
-  console.log('[RTFM:bg] settings loaded, provider:', settings.provider, 'model:', settings.model, 'hasApiKey:', !!settings.apiKey);
+  const { url, pageUrl, pageTitle, force } = message;
 
-  console.log('[RTFM:bg] fetching ToS URL:', url);
+  const settings = await getSettings();
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not fetch Terms of Service: ${response.status} ${response.statusText}`);
@@ -80,10 +81,22 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
 
   const html = await response.text();
   const text = truncateText(extractTextFromHtml(html), MAX_CHARS);
-  console.log('[RTFM:bg] extracted text length:', text.length);
+  const textHash = await sha256(text);
 
-  console.log('[RTFM:bg] calling LLM (summary + preferences + scores)...');
-  const [summaryRes, prefsRes, scoresRes] = await Promise.all([
+  if (!force) {
+    const cached = await getCachedAnalysis(url, textHash);
+    if (cached) {
+      await setActiveAnalysis({
+        status: 'complete',
+        url,
+        result: cached.summary,
+        analyzedAt: cached.createdAt,
+      });
+      return;
+    }
+  }
+
+  const [summaryRes, prefsRes] = await Promise.all([
     callLLM({
       settings,
       prompt: buildSummaryPrompt(settings, text),
@@ -94,21 +107,15 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
       prompt: buildPreferencesPrompt(settings, text),
       systemPrompt: 'You are a helpful legal assistant. Respond only with valid JSON.',
     }),
-    callLLM({
-      settings,
-      prompt: buildScoresPrompt(text),
-      systemPrompt: 'You are a legal-document analyst. Respond only with valid JSON.',
-    }),
   ]);
 
-  console.log('[RTFM:bg] LLM summary error?', summaryRes.error ?? 'none', '| prefs error?', prefsRes.error ?? 'none', '| scores error?', scoresRes.error ?? 'none');
   if (summaryRes.error) {
     throw new Error(summaryRes.error);
   }
 
   const parsedSummary = parseSummaryResponse(summaryRes.text);
   const preferencesAnalysis = prefsRes.error ? [] : parsePreferencesResponse(prefsRes.text);
-  const scores = scoresRes.error ? undefined : (parseScoresResponse(scoresRes.text) ?? undefined);
+  const scores = scoreDocument(text, settings.scoringRules);
 
   const summary: SummaryResult = {
     summary: parsedSummary.summary || summaryRes.text,
@@ -121,18 +128,23 @@ async function handleAnalyze(message: AnalyzeMessage): Promise<void> {
     scores,
   };
 
+  await recordAnalysis(preferencesAnalysis.filter((p) => p.matched).map((p) => ({ preferenceId: p.preferenceId })));
+
+  const createdAt = Date.now();
   const entry: HistoryEntry = {
     id: crypto.randomUUID(),
     url,
     pageUrl,
     pageTitle,
-    title: pageTitle || url,
+    title: pageTitle || new URL(url).hostname || 'Terms of Service',
+    textHash,
     summary,
-    createdAt: Date.now(),
+    createdAt,
+    expiresAt: createdAt + settings.historyExpirationDays * 24 * 60 * 60 * 1000,
   };
-
   await addHistoryEntry(entry);
-  console.log('[RTFM:bg] history entry saved, id:', entry.id);
+
+  await setActiveAnalysis({ status: 'complete', url, result: summary, analyzedAt: createdAt });
 }
 
 chrome.action.onClicked.addListener((tab) => {
@@ -142,5 +154,10 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ activeAnalysis: null });
+  void chrome.storage.session.set({ activeAnalysis: null });
+  void getSettings().then((settings) => {
+    if (!settings.consentGiven) {
+      void chrome.runtime.openOptionsPage();
+    }
+  });
 });

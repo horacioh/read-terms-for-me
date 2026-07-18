@@ -1,25 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Read Terms For Me",
-  "version": "0.1.0",
-  "description": "Detects Terms of Service links and summarizes them with BYOK or local LLMs.",
-  "permissions": ["activeTab", "tabs", "storage", "sidePanel"],
-  "host_permissions": ["<all_urls>"],
+  "version": "0.2.0",
+  "description": "Detects Terms of Service links and summarizes them with a privacy-first, rule-based score.",
+  "permissions": ["activeTab", "storage", "sidePanel"],
+  "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://*/*", "http://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_icon": {
-      "16": "icons/icon.svg",
-      "32": "icons/icon.svg"
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
     },
     "default_title": "Read Terms For Me"
   },
@@ -28,9 +28,9 @@
   },
   "options_page": "options/options.html",
   "icons": {
-    "16": "icons/icon.svg",
-    "32": "icons/icon.svg",
-    "48": "icons/icon.svg",
-    "128": "icons/icon.svg"
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   }
 }
